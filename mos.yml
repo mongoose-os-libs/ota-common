@@ -1,0 +1,31 @@
+author: mongoose-os
+description: OTA common bits
+type: lib
+version: 1.0
+
+platforms: [ cc3200, esp32, esp8266 ]
+
+sources:
+  - src
+  - src/${platform}
+
+includes:
+  - include
+
+libs:
+  - origin: https://github.com/mongoose-os-libs/mongoose
+
+config_schema:
+  - ["update", "o", {title: "Firmware updater"}]
+  - ["update.timeout", "i", 300, {title : "Update will be aborted if it does not finish within this time"}]
+  - ["update.commit_timeout", "i", {title : "After applying update, wait for commit up to this long"}]
+
+tags:
+  - c
+  - core
+  - ota
+
+build_vars:
+  MGOS_HAVE_OTA_COMMON: 1
+
+manifest_version: 2017-09-29
