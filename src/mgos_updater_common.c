@@ -48,22 +48,6 @@ extern const char *build_version;
 #define PROGRESS_REPORT_BYTES 50000
 #define PROGRESS_REPORT_SECONDS 5
 
-static mgos_upd_event_cb s_event_cb = NULL;
-static void *s_event_cb_arg = NULL;
-
-#define CALL_HOOK(ll, _upd_ev, _upd_arg, _state, _fmt, ...)            \
-  do {                                                                 \
-    char buf[100];                                                     \
-    snprintf(buf, sizeof(buf), _fmt, __VA_ARGS__);                     \
-    LOG(ll, ("%s", buf));                                              \
-    struct mgos_ota_status ota_status = {.state = _state, .msg = buf}; \
-    /* TODO(lsm): deprecate this ad-hoc updater event API */           \
-    mgos_event_trigger(MGOS_EVENT_OTA_STATUS, &ota_status);            \
-    if (s_event_cb != NULL) {                                          \
-      s_event_cb(_upd_ev, _upd_arg, s_event_cb_arg);                   \
-    }                                                                  \
-  } while (0)
-
 /*
  * --- Zip file local header structure ---
  *                                             size  offset
@@ -111,6 +95,12 @@ enum update_state {
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
+static void mgos_upd_trigger_ota_event(void) {
+  struct mgos_ota_status s;
+  mgos_upd_get_status(&s);
+  mgos_event_trigger(MGOS_EVENT_OTA_STATUS, &s);
+}
+
 static void updater_abort(void *arg) {
   struct update_context *ctx = (struct update_context *) arg;
   if (s_ctx != ctx) return;
@@ -125,14 +115,12 @@ static void updater_abort(void *arg) {
 
 struct update_context *updater_context_create(int timeout) {
   if (s_ctx != NULL) {
-    CALL_HOOK(LL_ERROR, MGOS_UPD_EV_ERROR, NULL, MGOS_OTA_STATE_ERROR, "%s",
-              "Update already in progress");
+    LOG(LL_ERROR, ("%s", "Update already in progress"));
     return NULL;
   }
 
   if (!mgos_upd_is_committed()) {
-    CALL_HOOK(LL_ERROR, MGOS_UPD_EV_ERROR, NULL, MGOS_OTA_STATE_ERROR, "%s",
-              "Previous update has not been committed yet");
+    LOG(LL_ERROR, ("%s", "Previous update has not been committed yet"));
     return NULL;
   }
 
@@ -146,8 +134,8 @@ struct update_context *updater_context_create(int timeout) {
 
   if (timeout <= 0) timeout = mgos_sys_config_get_update_timeout();
   s_ctx->wdt = mgos_set_timer(timeout * 1000, 0, updater_abort, s_ctx);
-  CALL_HOOK(LL_INFO, MGOS_UPD_EV_INIT, NULL, MGOS_OTA_STATE_INIT,
-            "starting, timeout %d hf %u", timeout, mgos_get_free_heap_size());
+  LOG(LL_INFO, ("starting, timeout %d", timeout));
+  s_ctx->ota_state = MGOS_OTA_STATE_PROGRESS;
   return s_ctx;
 }
 
@@ -253,7 +241,7 @@ static int parse_zip_file_header(struct update_context *ctx) {
   if (compression_method != 0) {
     /* Do not support compressed archives */
     ctx->status_msg = "Cannot handle compressed .zip";
-    LOG(LL_ERROR, ("File is compressed)"));
+    LOG(LL_ERROR, ("%s", ctx->status_msg));
     return -1;
   }
 
@@ -277,8 +265,8 @@ static int parse_zip_file_header(struct update_context *ctx) {
 
   if (nodir_file_name_len >= sizeof(ctx->info.current_file.name)) {
     /* We are in charge of file names, right? */
-    LOG(LL_ERROR, ("Too long file name"));
     ctx->status_msg = "Too long file name";
+    LOG(LL_ERROR, ("%s", ctx->status_msg));
     return -1;
   }
   memcpy(ctx->info.current_file.name, nodir_file_name, nodir_file_name_len);
@@ -390,20 +378,18 @@ static void mgos_updater_progress(struct update_context *ctx) {
     if (ctx->zip_file_size > 0) {
       float ratio =
           (float) ctx->bytes_already_downloaded * 100.0f / ctx->zip_file_size;
-      CALL_HOOK(LL_INFO, MGOS_UPD_EV_PROGRESS, &ctx->info,
-                MGOS_OTA_STATE_PROGRESS, "%.2f%% total, %s %d of %d", ratio,
-                ctx->info.current_file.name,
-                (int) ctx->info.current_file.processed,
-                (int) ctx->info.current_file.size);
+      LOG(LL_INFO,
+          ("%.2f%% total, %s %d of %d", ratio, ctx->info.current_file.name,
+           (int) ctx->info.current_file.processed,
+           (int) ctx->info.current_file.size));
     } else {
-      CALL_HOOK(LL_INFO, MGOS_UPD_EV_PROGRESS, &ctx->info,
-                MGOS_OTA_STATE_PROGRESS, "%s %d of %d",
-                ctx->info.current_file.name,
-                (int) ctx->info.current_file.processed,
-                (int) ctx->info.current_file.size);
+      LOG(LL_INFO, ("%s %d of %d", ctx->info.current_file.name,
+                    (int) ctx->info.current_file.processed,
+                    (int) ctx->info.current_file.size));
     }
     ctx->last_reported_bytes = ctx->bytes_already_downloaded;
     ctx->last_reported_time = mg_time();
+    mgos_upd_trigger_ota_event();
   }
 }
 
@@ -461,6 +447,7 @@ static int updater_process_int(struct update_context *ctx, const char *data,
               ("Wrong platform: want \"%s\", got \"%s\"",
                CS_STRINGIFY_MACRO(FW_ARCHITECTURE), ctx->info.platform.ptr));
           ctx->status_msg = "Wrong platform";
+          ctx->ota_state = MGOS_OTA_STATE_ERROR;
           return -1;
         }
 
@@ -478,13 +465,6 @@ static int updater_process_int(struct update_context *ctx, const char *data,
           LOG(LL_ERROR, ("Bad manifest: %d %s", ret, ctx->status_msg));
           return ret;
         }
-
-        CALL_HOOK(LL_INFO, MGOS_UPD_EV_BEGIN, &ctx->info, MGOS_OTA_STATE_BEGIN,
-                  "App: %.*s FW: %.*s Build ID: %.*s", ctx->info.name.len,
-                  ctx->info.name.ptr, ctx->info.version.len,
-                  ctx->info.version.ptr, ctx->info.build_id.len,
-                  ctx->info.build_id.ptr);
-
         if (ctx->result) return ctx->result;
 
         context_clear_current_file(ctx);
@@ -596,8 +576,6 @@ static int updater_process_int(struct update_context *ctx, const char *data,
       case US_FINALIZE: {
         ret = 1;
         ctx->status_msg = "Update applied, finalizing";
-        CALL_HOOK(LL_INFO, MGOS_UPD_EV_COMMIT, NULL, MGOS_OTA_STATE_FINALIZING,
-                  "commit timeout %d", ctx->fctx.commit_timeout);
         if (ctx->fctx.commit_timeout > 0) {
           if (!mgos_upd_set_commit_timeout(ctx->fctx.commit_timeout)) {
             ctx->status_msg = "Cannot save update status";
@@ -643,9 +621,9 @@ int updater_finalize(struct update_context *ctx) {
 void updater_finish(struct update_context *ctx) {
   if (ctx->update_state == US_FINISHED) return;
   updater_set_status(ctx, US_FINISHED);
-  const char *msg = (ctx->status_msg ? ctx->status_msg : "???");
-  CALL_HOOK(LL_INFO, MGOS_UPD_EV_END, ctx, MGOS_OTA_STATE_DONE,
-            "Finished: %d %s", ctx->result, msg);
+  ctx->ota_state =
+      ctx->result == 1 ? MGOS_OTA_STATE_SUCCESS : MGOS_OTA_STATE_ERROR;
+  mgos_upd_trigger_ota_event();
   updater_process_int(ctx, NULL, 0);
 }
 
@@ -758,10 +736,9 @@ out:
 
 bool mgos_upd_commit() {
   if (mgos_upd_is_committed()) return false;
-  CALL_HOOK(LL_INFO, MGOS_UPD_EV_COMMIT, NULL, MGOS_OTA_STATE_COMMIT, "%s",
-            "OTA success: commiting");
   mgos_upd_boot_commit();
   remove(UPDATER_CTX_FILE_NAME);
+  mgos_upd_trigger_ota_event();
   return true;
 }
 
@@ -773,8 +750,6 @@ bool mgos_upd_is_committed() {
 
 bool mgos_upd_revert(bool reboot) {
   if (mgos_upd_is_committed()) return false;
-  CALL_HOOK(LL_INFO, MGOS_UPD_EV_ROLLBACK, NULL, MGOS_OTA_STATE_ROLLBACK, "%s",
-            "OTA failure: reverting");
   mgos_upd_boot_revert();
   if (reboot) mgos_system_restart();
   return true;
@@ -823,8 +798,6 @@ void mgos_upd_boot_finish(bool is_successful, bool is_first) {
   LOG(LL_DEBUG, ("%d %d", is_successful, is_first));
   if (!is_first) return;
   if (!is_successful) {
-    CALL_HOOK(LL_INFO, MGOS_UPD_EV_ROLLBACK, NULL, MGOS_OTA_STATE_ROLLBACK,
-              "%s", "Reverting OTA");
     mgos_upd_revert(true /* reboot */);
     /* Not reached */
     return;
@@ -838,33 +811,19 @@ void mgos_upd_boot_finish(bool is_successful, bool is_first) {
   } else {
     mgos_upd_commit();
   }
-}
-
-void mgos_upd_set_event_cb(mgos_upd_event_cb cb, void *cb_arg) {
-  s_event_cb = cb;
-  s_event_cb_arg = cb_arg;
+  mgos_upd_trigger_ota_event();
 }
 
 const char *mgos_ota_state_str(enum mgos_ota_state state) {
   switch (state) {
-    case MGOS_OTA_STATE_NONE:
-      return "not initialised";
-    case MGOS_OTA_STATE_INIT:
-      return "init";
-    case MGOS_OTA_STATE_BEGIN:
-      return "begin";
+    case MGOS_OTA_STATE_IDLE:
+      return "idle";
     case MGOS_OTA_STATE_PROGRESS:
       return "progress";
-    case MGOS_OTA_STATE_FINALIZING:
-      return "finalizing";
-    case MGOS_OTA_STATE_DONE:
-      return "done";
     case MGOS_OTA_STATE_ERROR:
       return "error";
-    case MGOS_OTA_STATE_COMMIT:
-      return "commit";
-    case MGOS_OTA_STATE_ROLLBACK:
-      return "rollback";
+    case MGOS_OTA_STATE_SUCCESS:
+      return "success";
   }
   return "";
 }
@@ -872,6 +831,24 @@ const char *mgos_ota_state_str(enum mgos_ota_state state) {
 /* For FFI */
 const char *mgos_ota_status_get_msg(struct mgos_ota_status *s) {
   return s->msg;
+}
+
+bool mgos_upd_get_status(struct mgos_ota_status *s) {
+  struct mgos_upd_boot_state bs;
+  memset(s, 0, sizeof(*s));
+  if (s_ctx != NULL) {
+    s->state = s_ctx->ota_state;
+    s->msg = s_ctx->status_msg;
+    if (s_ctx->zip_file_size > 0)
+      s->progress_percent =
+          s_ctx->bytes_already_downloaded * 100.0 / s_ctx->zip_file_size;
+  }
+  if (s->msg == NULL) s->msg = mgos_ota_state_str(s->state);
+  if (!mgos_upd_boot_get_state(&bs)) return false;
+  s->is_committed = bs.is_committed;
+  s->partition = bs.active_slot;
+  s->commit_timeout = mgos_upd_get_commit_timeout();
+  return true;
 }
 
 bool mgos_ota_common_init(void) {

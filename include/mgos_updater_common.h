@@ -28,26 +28,26 @@ typedef void (*mgos_updater_result_cb)(struct update_context *ctx);
 struct mgos_upd_hal_ctx; /* This struct is defined by HAL and is opaque to us */
 
 enum mgos_ota_state {
-  MGOS_OTA_STATE_NONE = 0,
-  MGOS_OTA_STATE_INIT,       /* "init" */
-  MGOS_OTA_STATE_BEGIN,      /* "begin" */
-  MGOS_OTA_STATE_PROGRESS,   /* "progress" */
-  MGOS_OTA_STATE_FINALIZING, /* "finalizing" */
-  MGOS_OTA_STATE_DONE,       /* "done" */
-  MGOS_OTA_STATE_ERROR,      /* "error" */
-  MGOS_OTA_STATE_COMMIT,     /* "commit" */
-  MGOS_OTA_STATE_ROLLBACK,   /* "rollback" */
+  MGOS_OTA_STATE_IDLE = 0, /* idle */
+  MGOS_OTA_STATE_PROGRESS, /* "progress" */
+  MGOS_OTA_STATE_ERROR,    /* "error" */
+  MGOS_OTA_STATE_SUCCESS,  /* "success" */
 };
 
 struct mgos_ota_status {
+  bool is_committed;
+  int commit_timeout;
+  int partition;
   enum mgos_ota_state state;
-  const char *msg;
+  const char *msg;      /* stringified state */
+  int progress_percent; /* valid only for "progress" state */
 };
 
 const char *mgos_ota_state_str(enum mgos_ota_state state);
 
 struct update_context {
-  int update_state;
+  int update_state;              /* Internal state machine - parsing zip, etc */
+  enum mgos_ota_state ota_state; /* Externally visible */
   const char *status_msg;
 
   char *zip_file_url;
@@ -108,6 +108,7 @@ void mgos_upd_boot_finish(bool is_successful, bool is_first);
 bool mgos_upd_commit();
 bool mgos_upd_is_committed();
 bool mgos_upd_revert(bool reboot);
+bool mgos_upd_get_status(struct mgos_ota_status *);
 
 int mgos_upd_get_commit_timeout();
 bool mgos_upd_set_commit_timeout(int commit_timeout);
