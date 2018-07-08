@@ -343,7 +343,7 @@ int mgos_upd_apply_update(void) {
   uint32_t old_fs_addr = cfg->fs_addresses[cfg->previous_rom];
   uint32_t old_fs_size = cfg->fs_sizes[cfg->previous_rom];
   LOG(LL_INFO, ("Mounting old FS: %d @ 0x%x", old_fs_size, old_fs_addr));
-  if (!esp_fs_mount("/old", old_fs_addr, old_fs_size)) {
+  if (!esp_fs_mount(old_fs_addr, old_fs_size, "oldroot", "/old")) {
     LOG(LL_ERROR, ("Update failed: cannot mount previous file system"));
     return -1;
   }
@@ -351,6 +351,7 @@ int mgos_upd_apply_update(void) {
   int ret = (mgos_upd_merge_fs("/old", "/") ? 0 : -2);
 
   mgos_vfs_umount("/old");
+  mgos_vfs_dev_unregister("oldroot");
 
   if (ret == 0) {
     cfg->user_flags &= ~BOOT_F_MERGE_FS;
@@ -430,8 +431,8 @@ int mgos_upd_create_snapshot() {
 bool mgos_upd_boot_get_state(struct mgos_upd_boot_state *bs) {
   rboot_config *cfg = get_rboot_config();
   if (cfg == NULL) return false;
-  LOG(LL_INFO, ("cur %d prev %d fwu %d", cfg->current_rom, cfg->previous_rom,
-                cfg->fw_updated));
+  LOG(LL_DEBUG, ("cur %d prev %d fwu %d", cfg->current_rom, cfg->previous_rom,
+                 cfg->fw_updated));
   memset(bs, 0, sizeof(*bs));
   bs->active_slot = cfg->current_rom;
   bs->revert_slot = cfg->previous_rom;
