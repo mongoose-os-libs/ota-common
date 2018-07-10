@@ -619,11 +619,11 @@ int updater_finalize(struct update_context *ctx) {
 }
 
 void updater_finish(struct update_context *ctx) {
-  if (ctx->update_state == US_FINISHED) return;
   updater_set_status(ctx, US_FINISHED);
   ctx->ota_state =
       ctx->result == 1 ? MGOS_OTA_STATE_SUCCESS : MGOS_OTA_STATE_ERROR;
   mgos_upd_trigger_ota_event();
+  if (ctx->update_state == US_FINISHED) return;
   updater_process_int(ctx, NULL, 0);
 }
 
@@ -842,6 +842,8 @@ bool mgos_upd_get_status(struct mgos_ota_status *s) {
     if (s_ctx->zip_file_size > 0)
       s->progress_percent =
           s_ctx->bytes_already_downloaded * 100.0 / s_ctx->zip_file_size;
+    LOG(LL_INFO, ("ZIP: %u / %u", s_ctx->bytes_already_downloaded,
+                  s_ctx->zip_file_size));
   }
   if (s->msg == NULL) s->msg = mgos_ota_state_str(s->state);
   if (!mgos_upd_boot_get_state(&bs)) return false;
