@@ -43,8 +43,13 @@ enum mgos_upd_file_action {
 enum mgos_upd_file_action mgos_upd_file_begin(
     struct mgos_upd_hal_ctx *ctx, const struct mgos_upd_file_info *fi);
 
+#ifndef MGOS_UPDATER_DATA_CHUNK_SIZE
+#define MGOS_UPDATER_DATA_CHUNK_SIZE 512
+#endif
 /*
- * Process batch of file data. Return number of bytes processed (0 .. data.len)
+ * Process a chunk of file data. Data will be delivered to this function in
+ * MGOS_UPDATER_DATA_CHUNK_SIZE chunks.
+ * Return number of bytes processed (0 .. data.len)
  * or < 0 for error. In case of error, message should be provided in status_msg.
  */
 int mgos_upd_file_data(struct mgos_upd_hal_ctx *ctx,
@@ -52,7 +57,8 @@ int mgos_upd_file_data(struct mgos_upd_hal_ctx *ctx,
 
 /*
  * Finalize a file. Remainder of the data (if any) is passed,
- * number of bytes of that data processed should be returned.
+ * number of bytes of that data processed should be returned. The amount of data
+ * will be less than MGOS_UPDATER_DATA_CHUNK_SIZE.
  * Value equal to data.len is an indication of success,
  * < 0 + ctx->status_msg on error.
  */

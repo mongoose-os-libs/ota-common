@@ -60,8 +60,6 @@
 #define MGOS_UPDATE_OLD_SLOT(v) ((v) &0x0f)
 #define MGOS_UPDATE_NEW_SLOT(v) (((v) >> 4) & 0x0f)
 
-#define WRITE_CHUNK_SIZE 512
-
 #define CS_LEN 20 /* SHA1 */
 #define CS_HEX_LEN (CS_LEN * 2)
 #define CS_HEX_BUF_SIZE (CS_HEX_LEN + 1)
@@ -70,8 +68,8 @@
 #define FLASH_PARAMS_LEN 4
 #define LABEL_OFFSET 8
 
-#if (FLASH_PARAMS_ADDR % WRITE_CHUNK_SIZE != 0) || \
-    WRITE_CHUNK_SIZE < FLASH_PARAMS_LEN
+#if (FLASH_PARAMS_ADDR % MGOS_UPDATER_DATA_CHUNK_SIZE != 0) || \
+    MGOS_UPDATER_DATA_CHUNK_SIZE < FLASH_PARAMS_LEN
 #error "Don't do that"
 #endif
 
@@ -218,7 +216,7 @@ static bool compute_checksum(const esp_partition_t *p, size_t len,
   mbedtls_sha1_init(&sha1_ctx);
   mbedtls_sha1_starts(&sha1_ctx);
   while (offset < len) {
-    uint8_t tmp[WRITE_CHUNK_SIZE];
+    uint8_t tmp[MGOS_UPDATER_DATA_CHUNK_SIZE];
     size_t block_len = len - offset;
     if (block_len > sizeof(tmp)) block_len = sizeof(tmp);
     esp_err_t err = esp_partition_read(p, offset, tmp, block_len);
@@ -338,34 +336,30 @@ int mgos_upd_file_data(struct mgos_upd_hal_ctx *ctx,
                        const struct mgos_upd_file_info *fi,
                        struct mg_str data) {
   esp_err_t err = ESP_FAIL;
-  int to_process = (data.len / WRITE_CHUNK_SIZE) * WRITE_CHUNK_SIZE;
-  if (to_process > 0) {
-    if (strncmp(fi->name, ctx->app_file_name.ptr, ctx->app_file_name.len) ==
-        0) {
-      err = esp_ota_write(ctx->app_ota_handle, data.p, to_process);
-    } else {
-      swap_flash_params(ctx, data, true /* save */);
-      err = esp_partition_write(ctx->write_partition, ctx->write_offset, data.p,
-                                to_process);
-      swap_flash_params(ctx, data, false /* save */);
-    }
-    if (err != ESP_OK) {
-      LOG(LL_ERROR,
-          ("Write %d @ %d failed: %d", (int) data.len, ctx->write_offset, err));
-      ctx->status_msg = "Failed to write data";
-      return -1;
-    }
-    ctx->write_offset += to_process;
+  int to_process = (int) data.len;
+  if (strncmp(fi->name, ctx->app_file_name.ptr, ctx->app_file_name.len) == 0) {
+    err = esp_ota_write(ctx->app_ota_handle, data.p, to_process);
+  } else {
+    swap_flash_params(ctx, data, true /* save */);
+    err = esp_partition_write(ctx->write_partition, ctx->write_offset, data.p,
+                              to_process);
+    swap_flash_params(ctx, data, false /* save */);
   }
+  if (err != ESP_OK) {
+    LOG(LL_ERROR,
+        ("Write %d @ %d failed: %d", (int) data.len, ctx->write_offset, err));
+    ctx->status_msg = "Failed to write data";
+    return -1;
+  }
+  ctx->write_offset += to_process;
   return to_process;
 }
 
 int mgos_upd_file_end(struct mgos_upd_hal_ctx *ctx,
                       const struct mgos_upd_file_info *fi, struct mg_str tail) {
-  assert(tail.len < WRITE_CHUNK_SIZE);
   int ret = -1;
   if (tail.len > 0) {
-    char tmp[WRITE_CHUNK_SIZE];
+    char tmp[MGOS_UPDATER_DATA_CHUNK_SIZE];
     memset(tmp, 0xff, sizeof(tmp));
     memcpy(tmp, tail.p, tail.len);
     ret = mgos_upd_file_data(ctx, fi, mg_mk_str_n(tmp, sizeof(tmp)));
@@ -561,7 +555,7 @@ void mgos_upd_boot_revert(void) {
 void mgos_upd_boot_commit(void) {
   int slot = MGOS_UPDATE_NEW_SLOT(g_boot_status);
   if (set_update_status(MGOS_UPDATE_OLD_SLOT(g_boot_status), slot,
-                        false /* first_boot */, false /* merger_fs */) &&
+                        false /* first_boot */, false /* merge_fs */) &&
       esp32_set_boot_slot(slot)) {
     LOG(LL_INFO, ("Committed slot %d", slot));
   } else {

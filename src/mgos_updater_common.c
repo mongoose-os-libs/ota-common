@@ -476,7 +476,7 @@ static int updater_process_int(struct update_context *ctx, const char *data,
           return 0;
         }
         if (memcmp(ctx->data, &c_zip_cdir_magic, 4) == 0) {
-          LOG(LL_DEBUG, ("Reached the end of archive"));
+          LOG(LL_INFO, ("Reached the end of archive"));
           updater_set_status(ctx, US_WRITE_FINISHED);
           break;
         }
@@ -500,23 +500,29 @@ static int updater_process_int(struct update_context *ctx, const char *data,
         ctx->last_reported_bytes = 0;
       } /* fall through */
       case US_WAITING_FILE: {
-        struct mg_str to_process;
-        to_process.p = ctx->data;
-        to_process.len =
-            MIN(ctx->info.current_file.size - ctx->info.current_file.processed,
-                ctx->data_len);
-
-        int num_processed = mgos_upd_file_data(
-            ctx->dev_ctx, &ctx->info.current_file, to_process);
-        if (num_processed < 0) {
-          ctx->status_msg = mgos_upd_get_status_msg(ctx->dev_ctx);
-          return num_processed;
-        } else if (num_processed > 0) {
-          ctx->current_file_crc_calc =
-              cs_crc32(ctx->current_file_crc_calc,
-                       (const uint8_t *) to_process.p, num_processed);
-          context_remove_data(ctx, num_processed);
-          ctx->info.current_file.processed += num_processed;
+        while (true) {
+          struct mg_str to_process = {
+              .p = ctx->data,
+              .len = MIN(MIN(ctx->info.current_file.size -
+                                 ctx->info.current_file.processed,
+                             ctx->data_len),
+                         MGOS_UPDATER_DATA_CHUNK_SIZE),
+          };
+          if (to_process.len < MGOS_UPDATER_DATA_CHUNK_SIZE) break;
+          int num_processed = mgos_upd_file_data(
+              ctx->dev_ctx, &ctx->info.current_file, to_process);
+          if (num_processed < 0) {
+            ctx->status_msg = mgos_upd_get_status_msg(ctx->dev_ctx);
+            return num_processed;
+          } else if (num_processed > 0) {
+            ctx->current_file_crc_calc =
+                cs_crc32(ctx->current_file_crc_calc,
+                         (const uint8_t *) to_process.p, num_processed);
+            context_remove_data(ctx, num_processed);
+            ctx->info.current_file.processed += num_processed;
+          } else {
+            break;
+          }
         }
         mgos_updater_progress(ctx);
 
@@ -527,10 +533,10 @@ static int updater_process_int(struct update_context *ctx, const char *data,
           return 0;
         }
 
-        to_process.p = ctx->data;
-        to_process.len = bytes_left;
+        struct mg_str tail = {.p = ctx->data, .len = bytes_left};
+        assert(tail.len < MGOS_UPDATER_DATA_CHUNK_SIZE);
 
-        if (finalize_write(ctx, to_process) < 0) {
+        if (finalize_write(ctx, tail) < 0) {
           return -1;
         }
         context_clear_current_file(ctx);
@@ -614,6 +620,12 @@ int updater_process(struct update_context *ctx, const char *data, size_t len) {
 }
 
 int updater_finalize(struct update_context *ctx) {
+  if (ctx->update_state == US_FINISHED) {
+    return -1;
+  } else if (ctx->update_state != US_WRITE_FINISHED) {
+    if (ctx->status_msg == NULL) ctx->status_msg = "Wrong state for finalize";
+    return -1;
+  }
   updater_set_status(ctx, US_FINALIZE);
   return updater_process(ctx, NULL, 0);
 }
@@ -716,7 +728,7 @@ bool mgos_upd_merge_fs(const char *old_fs_path, const char *new_fs_path) {
   struct dirent *de;
   while ((de = readdir(dir)) != NULL) {
     struct stat st;
-    char tmp_name[MG_MAX_PATH];
+    char tmp_name[MG_MAX_PATH + 1];
     sprintf(tmp_name, "%s/%s", new_fs_path, de->d_name);
     if (stat(tmp_name, &st) != 0) {
       /* File not found on the new fs, copy. */
@@ -839,11 +851,10 @@ bool mgos_upd_get_status(struct mgos_ota_status *s) {
   if (s_ctx != NULL) {
     s->state = s_ctx->ota_state;
     s->msg = s_ctx->status_msg;
-    if (s_ctx->zip_file_size > 0)
+    if (s_ctx->zip_file_size > 0) {
       s->progress_percent =
           s_ctx->bytes_already_downloaded * 100.0 / s_ctx->zip_file_size;
-    LOG(LL_INFO, ("ZIP: %u / %u", s_ctx->bytes_already_downloaded,
-                  s_ctx->zip_file_size));
+    }
   }
   if (s->msg == NULL) s->msg = mgos_ota_state_str(s->state);
   if (!mgos_upd_boot_get_state(&bs)) return false;
