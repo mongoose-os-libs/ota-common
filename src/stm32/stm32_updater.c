@@ -335,7 +335,3 @@ bool mgos_upd_is_first_boot(void) {
   if (bcfg == NULL) return false;
   return (bcfg->flags & MGOS_BOOT_F_FIRST_BOOT_A) != 0;
 }
-
-void mgos_boot_dbg_putc(char c) {
-  putc(c, stderr);
-}
