@@ -13,6 +13,7 @@
 #include <stdint.h>
 
 #include "frozen.h"
+#include "mgos_event.h"
 #include "mgos_timers.h"
 #include "mgos_updater.h"
 #include "mgos_updater_hal.h"
@@ -26,6 +27,14 @@ struct update_context;
 typedef void (*mgos_updater_result_cb)(struct update_context *ctx);
 
 struct mgos_upd_hal_ctx; /* This struct is defined by HAL and is opaque to us */
+
+#define MGOS_EVENT_OTA_BASE MGOS_EVENT_BASE('O', 'T', 'A')
+enum mgos_event_ota {
+  MGOS_EVENT_OTA_BEGIN =
+      MGOS_EVENT_OTA_BASE, /* ev_data: struct mgos_upd_info */
+  MGOS_EVENT_OTA_STATUS,   /* ev_data: struct mgos_ota_status */
+  MGOS_EVENT_OTA_REQUEST,  /* ev_data: struct ota_request_param */
+};
 
 enum mgos_ota_state {
   MGOS_OTA_STATE_IDLE = 0, /* idle */

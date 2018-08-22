@@ -465,7 +465,13 @@ static int updater_process_int(struct update_context *ctx, const char *data,
           LOG(LL_ERROR, ("Bad manifest: %d %s", ret, ctx->status_msg));
           return ret;
         }
-        if (ctx->result) return ctx->result;
+
+        ctx->info.abort = false;
+        mgos_event_trigger(MGOS_EVENT_OTA_BEGIN, &ctx->info);
+        if (ctx->info.abort) {
+          ctx->status_msg = "OTA aborted by the MGOS_EVENT_OTA_BEGIN handler";
+          return -1;
+        }
 
         context_clear_current_file(ctx);
         updater_set_status(ctx, US_WAITING_FILE_HEADER);
