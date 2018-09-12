@@ -81,10 +81,12 @@ int mgos_upd_begin(struct mgos_upd_hal_ctx *ctx, struct json_token *parts) {
   ctx->app_app_offset = ctx->app_fs_offset + ctx->app_fs_size;
   ctx->app_org = FLASH_BASE + ctx->app_app_offset;
   /* Try to put into a directly bootable slot, if possible. */
-  ctx->dst_slot = mgos_boot_cfg_find_slot(bcfg, ctx->app_org, -1, -1);
+  ctx->dst_slot =
+      mgos_boot_cfg_find_slot(bcfg, ctx->app_org, true /* want_fs */, -1, -1);
   if (ctx->dst_slot < 0) {
     /* Ok, try any available slot, boot loader will perform a swap. */
-    ctx->dst_slot = mgos_boot_cfg_find_slot(bcfg, 0 /* map_addr */, -1, -1);
+    ctx->dst_slot = mgos_boot_cfg_find_slot(bcfg, 0 /* map_addr */,
+                                            true /* want_fs */, -1, -1);
   }
   if (ctx->dst_slot < 0) {
     ctx->status_msg = "No slots available for update";
