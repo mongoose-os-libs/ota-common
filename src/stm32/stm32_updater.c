@@ -40,6 +40,8 @@ struct mgos_upd_hal_ctx {
   uintptr_t app_org;
   size_t file_offset, app_bl_cfg_offset, app_fs_offset, app_app_offset;
   uint32_t app_len, app_crc32;
+  struct mgos_vfs_dev *cur_dev;
+  size_t cur_dev_num_erased;
   int8_t dst_slot;
 };
 
@@ -178,20 +180,47 @@ int mgos_upd_file_data(struct mgos_upd_hal_ctx *ctx,
   } else if (mg_vcmp(&ctx->fs_file_name, fi->name) == 0) {
     dev = ctx->fs_dev;
   }
+  if (dev != ctx->cur_dev) {
+    ctx->cur_dev = dev;
+    ctx->cur_dev_num_erased = 0;
+  }
   LOG(LL_DEBUG,
       ("fn %s ds %d fo %d | %d %d %d | dev %s wo %d", fi->name, (int) data.len,
        (int) ctx->file_offset, (int) ctx->app_bl_size, (int) ctx->app_fs_offset,
        (int) ctx->app_app_offset, (dev ? dev->name : "-"), (int) write_offset));
   if (dev != NULL) {
-    if (write_offset == 0) {
-      size_t erase_len = mgos_vfs_dev_get_size(dev);
-      enum mgos_vfs_dev_err eres = mgos_vfs_dev_erase(dev, 0, erase_len);
+    /* See if we need to erase before writing. */
+    size_t write_end = write_offset + data.len;
+    if (write_end > ctx->cur_dev_num_erased) {
+      size_t erase_len = 0;
+      size_t erase_sizes[MGOS_VFS_DEV_NUM_ERASE_SIZES];
+      size_t dev_size = mgos_vfs_dev_get_size(dev);
+      size_t headroom = dev_size - ctx->cur_dev_num_erased;
+      if (mgos_vfs_dev_get_erase_sizes(dev, erase_sizes) == 0) {
+        erase_len = write_end - ctx->cur_dev_num_erased;
+        /* Use the largest erase size smaller than the remaining space ahead. */
+        for (int i = 0; i < (int) ARRAY_SIZE(erase_sizes); i++) {
+          if (erase_sizes[i] > 0 && erase_sizes[i] < headroom) {
+            erase_len = erase_sizes[i];
+          } else {
+            break;
+          }
+        }
+      } else {
+        /* Just nuke the whole thing */
+        erase_len = headroom;
+      }
+      LOG(LL_DEBUG, ("Erase %s %d @ 0x%lx", dev->name, (int) erase_len,
+                     (unsigned long) ctx->cur_dev_num_erased));
+      enum mgos_vfs_dev_err eres =
+          mgos_vfs_dev_erase(dev, ctx->cur_dev_num_erased, erase_len);
       if (eres != 0) {
         ctx->status_msg = "Erase failed";
         LOG(LL_INFO,
             ("%s: erase %d failed: %d", dev->name, (int) erase_len, eres));
         goto out;
       }
+      ctx->cur_dev_num_erased += erase_len;
     }
     enum mgos_vfs_dev_err wres =
         mgos_vfs_dev_write(dev, write_offset, data.len, data.p);
@@ -244,8 +273,6 @@ int mgos_upd_finalize(struct mgos_upd_hal_ctx *ctx) {
   ss->app_flags = 0;
   LOG(LL_INFO, ("Updating boot config"));
   res = (mgos_boot_cfg_write(bcfg, true /* dump */) ? 1 : -1);
-  ctx->status_msg = "BOOM!";
-  res = -123;
 
 out:
   return res;
@@ -310,26 +337,30 @@ out:
   return res;
 }
 
+static bool mgos_boot_commit_slot(struct mgos_boot_cfg *bcfg, int8_t slot) {
+  bcfg->active_slot = slot;
+  bcfg->revert_slot = -1;
+  bcfg->flags |= MGOS_BOOT_F_COMMITTED;
+  bcfg->flags &= ~(MGOS_BOOT_F_FIRST_BOOT_A | MGOS_BOOT_F_MERGE_FS);
+  return (mgos_boot_cfg_write(bcfg, false /* dump */));
+}
+
 void mgos_upd_boot_commit(void) {
   struct mgos_boot_cfg *bcfg = mgos_boot_cfg_get();
   if (bcfg == NULL) return;
-  bcfg->flags |= MGOS_BOOT_F_COMMITTED;
-  bcfg->flags &= ~(MGOS_BOOT_F_FIRST_BOOT_A | MGOS_BOOT_F_MERGE_FS);
-  if (mgos_boot_cfg_write(bcfg, false /* dump */) && bcfg->revert_slot < 0) {
-    LOG(LL_INFO, ("Committed slot %d", bcfg->active_slot));
+  int8_t active_slot = bcfg->active_slot;
+  if (mgos_boot_commit_slot(bcfg, active_slot)) {
+    LOG(LL_INFO, ("Committed slot %d", active_slot));
   }
 }
 
 void mgos_upd_boot_revert(void) {
   struct mgos_boot_cfg *bcfg = mgos_boot_cfg_get();
   if (bcfg == NULL) return;
-  if (bcfg->revert_slot < 0) {
-    LOG(LL_ERROR, ("No slot to revert to!"));
-    return;
+  int8_t revert_slot = bcfg->revert_slot;
+  if (mgos_boot_commit_slot(bcfg, revert_slot)) {
+    LOG(LL_INFO, ("Reverted to slot %d", revert_slot));
   }
-  bcfg->active_slot = bcfg->revert_slot;
-  bcfg->revert_slot = -1;
-  mgos_upd_boot_commit();
 }
 
 bool mgos_upd_is_first_boot(void) {
