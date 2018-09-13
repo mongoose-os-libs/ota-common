@@ -28,5 +28,6 @@ tags:
   - c
   - core
   - ota
+  - docs:net:OTA
 
 manifest_version: 2018-06-20
