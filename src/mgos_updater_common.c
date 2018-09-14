@@ -119,6 +119,12 @@ struct update_context *updater_context_create(int timeout) {
     return NULL;
   }
 
+  struct mgos_upd_boot_state st;
+  if (!mgos_upd_boot_get_state(&st)) {
+    LOG(LL_ERROR, ("%s", "OTA is not supported"));
+    return NULL;
+  }
+
   if (!mgos_upd_is_committed()) {
     LOG(LL_ERROR, ("%s", "Previous update has not been committed yet"));
     return NULL;
