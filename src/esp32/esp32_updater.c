@@ -176,8 +176,8 @@ int mgos_upd_begin(struct mgos_upd_hal_ctx *ctx, struct json_token *parts) {
   ctx->update_bootloader = update_bootloader;
   if (ctx->update_bootloader) {
     /* Create a bootloader "partition", so esp_partition_* API can be used. */
-    ctx->boot_partition.address = 0;
-    ctx->boot_partition.size = ESP_BOOTLOADER_SIZE;
+    ctx->boot_partition.address = 0x1000;
+    ctx->boot_partition.size = (CONFIG_PARTITION_TABLE_OFFSET - 0x1000);
     /* If encryption is enabled, boot loader must be encrypted. */
     ctx->boot_partition.encrypted = esp_flash_encryption_enabled();
     if (boot_addr > ctx->boot_partition.size) {
