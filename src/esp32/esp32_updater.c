@@ -42,6 +42,7 @@
 #include "mgos_updater_util.h"
 #include "mgos_utils.h"
 #include "mgos_vfs.h"
+#include "mgos_vfs_internal.h"
 
 #include "esp32_fs.h"
 
@@ -50,7 +51,7 @@
  * We store a 32-bit uint with old slot, new slot and first boot flag.
  */
 #define MGOS_UPDATE_NVS_NAMESPACE "mgos"
-#define MGOS_UPDATE_NVS_KEY "update"
+#define MGOS_UPDATE_NVS_KEY_FLAGS "update"
 #define MGOS_UPDATE_MERGE_FS 0x200
 #define MGOS_UPDATE_FIRST_BOOT 0x100
 #define MGOS_UPDATE_NVS_VAL(old_slot, new_slot, first_boot, merge_fs)       \
@@ -59,6 +60,8 @@
    ((old_slot) &0xf))
 #define MGOS_UPDATE_OLD_SLOT(v) ((v) &0x0f)
 #define MGOS_UPDATE_NEW_SLOT(v) (((v) >> 4) & 0x0f)
+/* In this key we store type and opts of the old FS. */
+#define MGOS_UPDATE_NVS_KEY_OLD_FS "update_old_fs"
 
 #define CS_LEN 20 /* SHA1 */
 #define CS_HEX_LEN (CS_LEN * 2)
@@ -401,12 +404,20 @@ static bool set_update_status(int old_slot, int new_slot, bool first_boot,
   }
   const uint32_t val =
       MGOS_UPDATE_NVS_VAL(old_slot, new_slot, first_boot, merge_fs);
-  err = nvs_set_u32(h, MGOS_UPDATE_NVS_KEY, val);
+  err = nvs_set_u32(h, MGOS_UPDATE_NVS_KEY_FLAGS, val);
   if (err != ESP_OK) {
     LOG(LL_ERROR, ("Failed to set: %d", err));
     goto cleanup;
   }
   LOG(LL_DEBUG, ("New status: %08x", val));
+  if (first_boot && merge_fs) {
+    char *old_fs_val;
+    mg_asprintf(&old_fs_val, 0, "%s %s", mgos_vfs_get_root_fs_type(),
+                mgos_vfs_get_root_fs_opts());
+    err = nvs_set_str(h, MGOS_UPDATE_NVS_KEY_OLD_FS, old_fs_val);
+    free(old_fs_val);
+  }
+  nvs_commit(h);
   g_boot_status = val;
   ret = true;
 
@@ -426,7 +437,7 @@ static uint32_t get_update_status() {
     }
     return val;
   }
-  err = nvs_get_u32(h, MGOS_UPDATE_NVS_KEY, &val);
+  err = nvs_get_u32(h, MGOS_UPDATE_NVS_KEY_FLAGS, &val);
   if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
     LOG(LL_ERROR, ("Failed to get: %d", err));
     goto cleanup;
@@ -565,6 +576,8 @@ void mgos_upd_boot_commit(void) {
 
 int mgos_upd_apply_update(void) {
   int ret = -1;
+  nvs_handle h = 0;
+  char *old_fs_val = NULL;
   int old_slot = MGOS_UPDATE_OLD_SLOT(g_boot_status);
   if (MGOS_UPDATE_NEW_SLOT(g_boot_status) == old_slot ||
       !(g_boot_status & MGOS_UPDATE_MERGE_FS)) {
@@ -573,10 +586,31 @@ int mgos_upd_apply_update(void) {
   const esp_partition_t *old_fs_part = esp32_find_fs_for_app_slot(old_slot);
   if (old_fs_part == NULL) {
     LOG(LL_ERROR, ("No old FS partition"));
-    return -1;
+    goto out;
   }
 
-  if (!esp32_fs_mount_part(old_fs_part->label, "/old")) {
+  const char *old_fs_type = mgos_vfs_get_root_fs_type();
+  const char *old_fs_opts = mgos_vfs_get_root_fs_opts();
+
+  esp_err_t err = nvs_open(MGOS_UPDATE_NVS_NAMESPACE, NVS_READONLY, &h);
+  if (err == ESP_OK) {
+    size_t l = 0;
+    if ((err = nvs_get_str(h, MGOS_UPDATE_NVS_KEY_OLD_FS, NULL, &l)) ==
+        ESP_OK) {
+      old_fs_val = malloc(l);
+      if (old_fs_val != NULL &&
+          (err = nvs_get_str(h, MGOS_UPDATE_NVS_KEY_OLD_FS, old_fs_val, &l)) ==
+              ESP_OK) {
+        old_fs_type = old_fs_val;
+        char *sp = strchr(old_fs_val, ' ');
+        *sp = '\0';
+        old_fs_opts = sp + 1;
+      }
+    }
+  }
+
+  if (!esp32_fs_mount_part(old_fs_part->label, "/old", old_fs_type,
+                           old_fs_opts)) {
     LOG(LL_ERROR, ("Failed to mount old file system"));
     return -1;
   }
@@ -585,6 +619,9 @@ int mgos_upd_apply_update(void) {
 
   mgos_vfs_umount("/old");
 
+out:
+  free(old_fs_val);
+  if (h != 0) nvs_close(h);
   return ret;
 }
 
