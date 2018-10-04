@@ -139,7 +139,8 @@ struct update_context *updater_context_create(int timeout) {
   s_ctx->dev_ctx = mgos_upd_hal_ctx_create();
 
   if (timeout <= 0) timeout = mgos_sys_config_get_update_timeout();
-  s_ctx->wdt = mgos_set_timer(timeout * 1000, 0, updater_abort, s_ctx);
+  s_ctx->wdt_timeout_ms = timeout * 1000;
+  s_ctx->wdt = mgos_set_timer(s_ctx->wdt_timeout_ms, 0, updater_abort, s_ctx);
   LOG(LL_INFO, ("starting, timeout %d", timeout));
   s_ctx->ota_state = MGOS_OTA_STATE_PROGRESS;
   return s_ctx;
@@ -392,6 +393,11 @@ static void mgos_updater_progress(struct update_context *ctx) {
       LOG(LL_INFO, ("%s %d of %d", ctx->info.current_file.name,
                     (int) ctx->info.current_file.processed,
                     (int) ctx->info.current_file.size));
+    }
+    /* If progress has been made, reset the update WDT. */
+    if (ctx->last_reported_bytes != ctx->bytes_already_downloaded) {
+      mgos_clear_timer(ctx->wdt);
+      ctx->wdt = mgos_set_timer(ctx->wdt_timeout_ms, 0, updater_abort, ctx);
     }
     ctx->last_reported_bytes = ctx->bytes_already_downloaded;
     ctx->last_reported_time = mg_time();

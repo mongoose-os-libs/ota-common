@@ -84,7 +84,10 @@ struct update_context {
   char file_name[50];
 
   struct mgos_upd_hal_ctx *dev_ctx;
+
   mgos_timer_id wdt;
+  int wdt_timeout_ms;
+
   /* Network connection associated with this update, if any.
    * It is only used in case update times out - it is closed. */
   struct mg_connection *nc;
