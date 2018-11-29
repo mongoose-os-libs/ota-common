@@ -10,6 +10,7 @@ sources:
   - src/${platform}
 
 includes:
+  - src
   - include
   - include/${platform}
 
