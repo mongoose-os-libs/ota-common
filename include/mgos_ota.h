@@ -91,6 +91,12 @@ struct mgos_ota_end_arg {
   const char *message;
 };
 
+struct mgos_ota_opts {
+  int timeout;
+  int commit_timeout;
+  bool ignore_same_version;
+};
+
 const char *mgos_ota_state_str(enum mgos_ota_state state);
 
 void mgos_ota_boot_finish(bool is_successful, bool is_first);
