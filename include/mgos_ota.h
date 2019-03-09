@@ -6,7 +6,7 @@
 /*
  * OTA API.
  *
- * See https://mongoose-os.com/docs/mos/userguide/ota.md for more details about
+ * See https://mongoose-os.com/docs/mongoose-os/userguide/ota.md for more details about
  * Mongoose OS OTA mechanism.
  */
 
