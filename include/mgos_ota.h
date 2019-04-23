@@ -6,8 +6,8 @@
 /*
  * OTA API.
  *
- * See https://mongoose-os.com/docs/mongoose-os/userguide/ota.md for more details about
- * Mongoose OS OTA mechanism.
+ * See https://mongoose-os.com/docs/mongoose-os/userguide/ota.md for more
+ * details about Mongoose OS OTA mechanism.
  */
 
 #pragma once
@@ -34,6 +34,7 @@ struct mgos_ota_file_info {
   char name[50];
   uint32_t size;
   uint32_t processed;
+  uint32_t crc32;
   /* Part that corresponds to this file (JSON). */
   struct mg_str part;
 };
