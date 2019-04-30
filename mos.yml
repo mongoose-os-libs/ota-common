@@ -15,7 +15,7 @@ includes:
   - include/${platform}
 
 libs:
-  - origin: https://github.com/cesanta/mongoose-os-libs/mongoose
+  - origin: https://github.com/mongoose-os-libs/mongoose
 
 no_implicit_init_deps: true
 init_deps:
@@ -30,12 +30,12 @@ conds:
   - when: mos.platform == "rs14100"
     apply:
       libs:
-        - origin: https://github.com/cesanta/mongoose-os-libs/bootloader
+        - origin: https://github.com/mongoose-os-libs/bootloader
 
   - when: mos.platform == "stm32"
     apply:
       libs:
-        - origin: https://github.com/cesanta/mongoose-os-libs/bootloader
+        - origin: https://github.com/mongoose-os-libs/bootloader
 
 tags:
   - c
