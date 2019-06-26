@@ -113,6 +113,15 @@ int mgos_ota_apply_update(void);
 int mgos_ota_get_commit_timeout(void);
 bool mgos_ota_set_commit_timeout(int commit_timeout);
 
+bool mgos_ota_start(const struct mgos_ota_src_if *src_if,
+                    struct mgos_ota_src_ctx *src_ctx,
+                    const struct mgos_ota_opts *opts);
+/*
+ * Continue processing, after start. Shoudl be called by source or backend
+ * when new data is available or the process in some other way unblocked.
+ */
+void mgos_ota_process(void);
+
 #ifdef __cplusplus
 }
 #endif
