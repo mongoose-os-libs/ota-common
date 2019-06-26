@@ -113,6 +113,9 @@ int mgos_ota_apply_update(void);
 int mgos_ota_get_commit_timeout(void);
 bool mgos_ota_set_commit_timeout(int commit_timeout);
 
+struct mgos_ota_src_if;
+struct mgos_ota_src_ctx;
+
 bool mgos_ota_start(const struct mgos_ota_src_if *src_if,
                     struct mgos_ota_src_ctx *src_ctx,
                     const struct mgos_ota_opts *opts);
