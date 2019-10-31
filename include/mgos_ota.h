@@ -106,7 +106,25 @@ bool mgos_ota_is_in_progress(void);
 bool mgos_ota_is_committed();
 bool mgos_ota_is_first_boot(void);
 bool mgos_ota_revert(bool reboot);
-bool mgos_ota_get_status(struct mgos_ota_status *);
+
+/*
+ * Get status of an update.
+ * If there is no update in progress, s->state will be MGOS_OTA_STATE_IDLE.
+ */
+bool mgos_ota_get_status(struct mgos_ota_status *s);
+
+/*
+ * If there is an update in progress, abort it.
+ * result is a numerical error code, which must be < 0.
+ * msg is an optional message to convey to the user, or NULL.
+ *
+ * NB: If msg is provided, it must be a constant string
+ * or live until MGOS_OTA_STATE_ERROR status is delivered.
+ *
+ * Returns true if an update was aborted.
+ */
+bool mgos_ota_abort(int result, const char *msg);
+
 /* Apply update on first boot, usually involves merging filesystem. */
 int mgos_ota_apply_update(void);
 
