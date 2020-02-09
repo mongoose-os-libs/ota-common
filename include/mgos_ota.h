@@ -16,7 +16,6 @@
 #include <stdint.h>
 
 #include "common/mg_str.h"
-
 #include "mgos_event.h"
 
 #ifdef __cplusplus
