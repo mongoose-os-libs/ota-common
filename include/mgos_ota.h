@@ -142,6 +142,30 @@ bool mgos_ota_start(const struct mgos_ota_src_if *src_if,
  */
 void mgos_ota_process(void);
 
+/*
+ * This function is invoked on first boot after update.
+ * The default implementation invokes mgos_ota_merge_fs.
+ * The function is defined as weak so you can override it with your own.
+ */
+bool mgos_ota_update_fs(const char *old_fs_path, const char *new_fs_path);
+
+/*
+ * Function to merge filesystems.
+ * Enumerates files on the old_fs_path and copies them to new_fs_path
+ * if mgos_ota_merge_fs_should_copy_file return true.
+ */
+bool mgos_ota_merge_fs(const char *old_fs_path, const char *new_fs_path);
+
+/*
+ * Filter function used by the default implementation of mgos_ota_merge_fs.
+ * The default implementation return true unless new_fs_path/file_name
+ * already exists.
+ * The function is defined as weak so you can override it with your own.
+ */
+bool mgos_ota_merge_fs_should_copy_file(const char *old_fs_path,
+                                        const char *new_fs_path,
+                                        const char *file_name);
+
 #ifdef __cplusplus
 }
 #endif
