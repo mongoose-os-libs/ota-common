@@ -15,6 +15,7 @@ includes:
   - include/${platform}
 
 libs:
+  - origin: https://github.com/mongoose-os-libs/mbedtls
   - origin: https://github.com/mongoose-os-libs/mongoose
 
 no_implicit_init_deps: true
