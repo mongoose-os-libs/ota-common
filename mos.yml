@@ -15,8 +15,8 @@ includes:
   - include/${platform}
 
 libs:
-  - origin: https://github.com/mongoose-os-libs/mbedtls
-  - origin: https://github.com/mongoose-os-libs/mongoose
+  - location: https://github.com/mongoose-os-libs/mbedtls
+  - location: https://github.com/mongoose-os-libs/mongoose
 
 no_implicit_init_deps: true
 init_deps:
@@ -31,12 +31,12 @@ conds:
   - when: mos.platform == "rs14100"
     apply:
       libs:
-        - origin: https://github.com/mongoose-os-libs/bootloader
+        - location: https://github.com/mongoose-os-libs/bootloader
 
   - when: mos.platform == "stm32"
     apply:
       libs:
-        - origin: https://github.com/mongoose-os-libs/bootloader
+        - location: https://github.com/mongoose-os-libs/bootloader
 
 tags:
   - c
