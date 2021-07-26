@@ -1,7 +1,7 @@
 author: mongoose-os
 description: OTA common bits
 type: lib
-version: 1.2.2
+version: 1.2.3
 
 platforms: [ cc3200, esp32, esp8266, rs14100, stm32, ubuntu ]
 
