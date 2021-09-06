@@ -1,7 +1,7 @@
 author: mongoose-os
 description: OTA common bits
 type: lib
-version: 1.3.0
+version: 1.4.0
 
 platforms: [ cc3200, esp32, esp8266, rs14100, stm32, ubuntu ]
 
@@ -24,8 +24,17 @@ init_deps:
 
 config_schema:
   - ["update", "o", {title: "Firmware updater"}]
-  - ["update.timeout", "i", 600, {title : "Update will be aborted if it does not finish within this time"}]
-  - ["update.commit_timeout", "i", {title : "After applying update, wait for commit up to this long"}]
+  - ["update.timeout", "i", 600, {title: "Update will be aborted if it does not finish within this time"}]
+  - ["update.commit_timeout", "i", {title: "After applying update, wait for commit up to this long"}]
+  - ["update.key0", "s", "", {title: "Update signature verification key 0. ECDSA P-256, DER + Base64."}]
+  - ["update.key1", "s", "", {title: "Update signature verification key 1. ECDSA P-256, DER + Base64."}]
+  - ["update.key2", "s", "", {title: "Update signature verification key 2. ECDSA P-256, DER + Base64."}]
+  - ["update.key3", "s", "", {title: "Update signature verification key 3. ECDSA P-256, DER + Base64."}]
+  - ["update.key4", "s", "", {title: "Update signature verification key 4. ECDSA P-256, DER + Base64."}]
+  - ["update.key5", "s", "", {title: "Update signature verification key 5. ECDSA P-256, DER + Base64."}]
+  - ["update.key6", "s", "", {title: "Update signature verification key 6. ECDSA P-256, DER + Base64."}]
+  - ["update.key7", "s", "", {title: "Update signature verification key 7. ECDSA P-256, DER + Base64."}]
+  - ["update.sig_req_mask", "i", -1, {title: "Update signature requirements. If >= 0, it is used as a bitmask where bit 0 corresponds to key 0, bit 1 to key 1, etc. All of the masked bits must be set, i.e. if sig_req is 3, update must be signed by both key 0 and key 1."}]
 
 conds:
   - when: mos.platform == "rs14100"

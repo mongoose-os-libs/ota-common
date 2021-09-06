@@ -47,6 +47,13 @@ struct mgos_ota_manifest_info {
   struct mg_str version;
   struct mg_str build_id;
   struct mg_str parts;
+  /*
+   * Update signature check results.
+   * Bit 0 corresponds to key 0 (update.key), bit 1 to ky 1 (update.key1), etc.
+   * E.g. sig_check_result = 1 means signature 0 verified successfully,
+   * sig_check_result = 7 means 3 valid signatures by key 0, 1 and 2.
+   */
+  uint8_t sig_check_result;
 };
 
 enum mgos_ota_result {
