@@ -36,7 +36,18 @@ config_schema:
   - ["update.key7", "s", "", {title: "Update signature verification key 7. ECDSA P-256, DER + Base64."}]
   - ["update.sig_req_mask", "i", -1, {title: "Update signature requirements. If >= 0, it is used as a bitmask where bit 0 corresponds to key 0, bit 1 to key 1, etc. All of the masked bits must be set, i.e. if sig_req is 3, update must be signed by both key 0 and key 1."}]
 
+cdefs:
+  MGOS_LIC_ENABLE: 1
+  MGOS_OTA_SIGN_ENABLE: 1
+
 conds:
+  - when: mos.platform == "cc3200"
+    apply:
+      cdefs:
+        # CC3200 just can't do it - crypto takes too much space.
+        MGOS_LIC_ENABLE: 0
+        MGOS_OTA_SIGN_ENABLE: 0
+
   - when: mos.platform == "rs14100"
     apply:
       libs:
