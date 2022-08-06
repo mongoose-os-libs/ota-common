@@ -1,9 +1,9 @@
 author: mongoose-os
 description: OTA common bits
 type: lib
-version: 1.4.1
+version: 1.5.0
 
-platforms: [ cc3200, esp32, esp8266, rs14100, stm32, ubuntu ]
+platforms: [ cc3200, esp32, esp32c3, esp8266, rs14100, stm32, ubuntu ]
 
 sources:
   - src
@@ -47,6 +47,20 @@ conds:
         # CC3200 just can't do it - crypto takes too much space.
         MGOS_LIC_ENABLE: 0
         MGOS_OTA_SIGN_ENABLE: 0
+
+  - when: mos.platform == "esp32"
+    apply:
+      sources:
+        - src/esp32xx
+      includes:
+        - include/esp32xx
+
+  - when: mos.platform == "esp32c3"
+    apply:
+      sources:
+        - src/esp32xx
+      includes:
+        - include/esp32xx
 
   - when: mos.platform == "rs14100"
     apply:

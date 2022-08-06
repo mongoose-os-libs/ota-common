@@ -23,7 +23,7 @@
 extern "C" {
 #endif
 
-void esp32_updater_early_init();
+void esp32xx_updater_early_init();
 
 #ifdef __cplusplus
 }
